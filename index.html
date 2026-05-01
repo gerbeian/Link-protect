@@ -24,9 +24,10 @@
             line-height: 1.5;
             padding: 2rem 1rem;
             position: relative;
+            min-height: 100vh;
         }
 
-        /* Corner watermark with favicon-style icon */
+        /* 左上角水印 */
         .waf-badge {
             position: fixed;
             top: 12px;
@@ -41,21 +42,15 @@
             border: 1px solid rgba(44,125,160,0.3);
             z-index: 1000;
             pointer-events: none;
-            letter-spacing: 0.3px;
             display: inline-flex;
             align-items: center;
             gap: 6px;
         }
-        /* small icon styling */
         .waf-icon {
             width: 16px;
             height: 16px;
             object-fit: contain;
-            display: inline-block;
-            vertical-align: middle;
-            image-rendering: crisp-edges;
         }
-        /* fallback icon (if image fails to load, a simple lock) */
         .waf-icon-fallback {
             font-size: 12px;
             color: #2c7da0;
@@ -68,7 +63,7 @@
 
         .header {
             text-align: center;
-            margin-bottom: 2.5rem;
+            margin-bottom: 2rem;
         }
         .header h1 {
             font-size: 2rem;
@@ -91,6 +86,15 @@
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 2rem;
+        }
+
+        /* 单列模式（仅解密时使用） */
+        .single-column {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .single-column .section {
+            width: 100%;
         }
 
         .section {
@@ -230,7 +234,6 @@
     </style>
 </head>
 <body>
-<!-- 左上角水印：添加来源于用户提供的图标，极小尺寸 -->
 <div class="waf-badge">
     <img class="waf-icon" src="https://i.imgs.ovh/2026/04/18/Zxml4x.webp" 
          alt="shield" 
@@ -239,14 +242,15 @@
     此页面受到MuFen WAF保护
 </div>
 
-<div class="container">
-    <div class="header">
-        <h1><i class="fas fa-link"></i> Link Cipher Password Shield</h1>
+<div class="container" id="appContainer">
+    <div class="header" id="pageHeader">
+        <h1><i class="fas fa-link"></i> Link Cipher · Password Shield</h1>
         <p>Use password to protect your link</p>
     </div>
 
-    <div class="two-columns">
-        <!-- Left: Encryption Generator -->
+    <!-- 正常双栏模式（两个区域都显示） -->
+    <div id="normalMode" class="two-columns">
+        <!-- 左侧：加密生成器 -->
         <div class="section">
             <div class="section-title"><i class="fas fa-lock"></i> Create Encrypted Link</div>
             <div class="input-group">
@@ -269,7 +273,7 @@
             </div>
         </div>
 
-        <!-- Right: Decryption Access Area -->
+        <!-- 右侧：解密访问区 -->
         <div class="section">
             <div class="section-title"><i class="fas fa-unlock-alt"></i> Decryption Access</div>
             <div id="decryptDefaultMsg">
@@ -280,7 +284,7 @@
                     <label><i class="fas fa-key"></i> Enter password to access the encrypted link</label>
                     <input type="password" id="accessPassword" placeholder="Enter password">
                     <div class="flex-btns" style="margin-top: 12px;">
-                        <button id="unlockBtn" class="btn btn-primary"><i class="fas fa-unlock"></i> Unlock & Reveal Link</button>
+                        <button id="unlockBtn" class="btn btn-primary"><i class="fas fa-unlock"></i> Unlock & Jump</button>
                         <button id="clearPasswordBtn" class="btn btn-secondary"><i class="fas fa-times"></i> Clear</button>
                     </div>
                     <div id="decryptMsg" class="status-msg"></div>
@@ -290,11 +294,287 @@
                 <label><i class="fas fa-eye"></i> Decrypted Real URL</label>
                 <div class="result-box" id="revealedUrl"></div>
                 <div class="flex-btns">
-                    <button id="visitLinkBtn" class="btn btn-primary"><i class="fas fa-external-link-alt"></i> Visit Link</button>
                     <button id="copyRealLinkBtn" class="btn btn-secondary"><i class="fas fa-copy"></i> Copy Link</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <footer
+    <!-- 仅解密模式（加密进入时显示，隐藏普通模式） -->
+    <div id="decryptOnlyMode" style="display: none;" class="single-column">
+        <div class="section">
+            <div class="section-title"><i class="fas fa-unlock-alt"></i> Password Required</div>
+            <div style="margin-bottom: 1rem; color: #496f86;">
+                <i class="fas fa-shield-alt"></i> This link is protected. Enter the password to continue.
+            </div>
+            <div class="password-input-area">
+                <input type="password" id="decryptOnlyPassword" placeholder="Enter password" autofocus>
+                <div class="flex-btns" style="margin-top: 12px;">
+                    <button id="decryptOnlyUnlockBtn" class="btn btn-primary"><i class="fas fa-unlock"></i> Unlock & Jump</button>
+                    <button id="decryptOnlyClearBtn" class="btn btn-secondary"><i class="fas fa-times"></i> Clear</button>
+                </div>
+                <div id="decryptOnlyMsg" class="status-msg"></div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <i class="fas fa-laptop-code"></i> Developed by GerBeian · AES-256 Encryption
+    </footer>
+</div>
+
+<script>
+    (function() {
+        if (typeof CryptoJS === 'undefined') {
+            alert("CryptoJS library failed to load. Please check your network.");
+            return;
+        }
+
+        // ---------- 核心加解密函数 ----------
+        function encryptUrl(url, password) {
+            if (!url || !password) throw new Error("URL and password cannot be empty");
+            const salt = CryptoJS.lib.WordArray.random(128/8);
+            const iv = CryptoJS.lib.WordArray.random(128/8);
+            const key = CryptoJS.PBKDF2(password, salt, { keySize: 256/32, iterations: 10000 });
+            const encrypted = CryptoJS.AES.encrypt(url, key, { iv: iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 });
+            const payload = {
+                s: CryptoJS.enc.Base64.stringify(salt),
+                i: CryptoJS.enc.Base64.stringify(iv),
+                c: encrypted.ciphertext.toString(CryptoJS.enc.Base64)
+            };
+            const jsonStr = JSON.stringify(payload);
+            return btoa(unescape(encodeURIComponent(jsonStr)));
+        }
+
+        function decryptUrl(payloadBase64, password) {
+            try {
+                const jsonStr = decodeURIComponent(escape(atob(payloadBase64)));
+                const payload = JSON.parse(jsonStr);
+                const salt = CryptoJS.enc.Base64.parse(payload.s);
+                const iv = CryptoJS.enc.Base64.parse(payload.i);
+                const ciphertext = CryptoJS.enc.Base64.parse(payload.c);
+                const key = CryptoJS.PBKDF2(password, salt, { keySize: 256/32, iterations: 10000 });
+                const decrypted = CryptoJS.AES.decrypt({ ciphertext: ciphertext }, key, { iv: iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 });
+                const originalText = decrypted.toString(CryptoJS.enc.Utf8);
+                if (!originalText) throw new Error("Decryption failed");
+                return originalText;
+            } catch (e) {
+                throw new Error("Wrong password or invalid encrypted link");
+            }
+        }
+
+        function getEncryptedPayloadFromHash() {
+            let hash = window.location.hash;
+            if (hash.startsWith('#')) hash = hash.substring(1);
+            return hash && hash.trim().length > 0 ? hash.trim() : null;
+        }
+
+        function buildEncryptedShareLink(payloadBase64) {
+            const baseUrl = window.location.href.split('#')[0];
+            return `${baseUrl}#${payloadBase64}`;
+        }
+
+        // DOM 元素
+        const normalModeDiv = document.getElementById('normalMode');
+        const decryptOnlyDiv = document.getElementById('decryptOnlyMode');
+        const pageHeader = document.getElementById('pageHeader');
+        
+        // 正常模式下的元素
+        const targetUrlInput = document.getElementById('targetUrl');
+        const encPasswordInput = document.getElementById('encPassword');
+        const generateBtn = document.getElementById('generateLinkBtn');
+        const clearFormBtn = document.getElementById('clearFormBtn');
+        const generatedArea = document.getElementById('generatedArea');
+        const encryptedLinkDisplay = document.getElementById('encryptedLinkDisplay');
+        const copyLinkBtn = document.getElementById('copyLinkBtn');
+        const generateMsg = document.getElementById('generateMsg');
+        const decryptDefaultMsg = document.getElementById('decryptDefaultMsg');
+        const decryptPanel = document.getElementById('decryptPanel');
+        const accessPassword = document.getElementById('accessPassword');
+        const unlockBtn = document.getElementById('unlockBtn');
+        const clearPasswordBtn = document.getElementById('clearPasswordBtn');
+        const decryptMsg = document.getElementById('decryptMsg');
+        const revealedLinkArea = document.getElementById('revealedLinkArea');
+        const revealedUrlSpan = document.getElementById('revealedUrl');
+        const copyRealLinkBtn = document.getElementById('copyRealLinkBtn');
+
+        // 仅解密模式下的元素
+        const decryptOnlyPassword = document.getElementById('decryptOnlyPassword');
+        const decryptOnlyUnlockBtn = document.getElementById('decryptOnlyUnlockBtn');
+        const decryptOnlyClearBtn = document.getElementById('decryptOnlyClearBtn');
+        const decryptOnlyMsg = document.getElementById('decryptOnlyMsg');
+
+        let currentDecryptedLink = null;
+
+        // ------------------- 判断是否为加密链接进入 -------------------
+        const payload = getEncryptedPayloadFromHash();
+        const isEncryptedEntry = !!payload;
+
+        if (isEncryptedEntry) {
+            // 隐藏双栏模式，显示仅解密模式
+            normalModeDiv.style.display = 'none';
+            decryptOnlyDiv.style.display = 'block';
+            // 可选：修改头部标题为简洁模式
+            pageHeader.innerHTML = `<h1><i class="fas fa-lock"></i> Protected Link</h1><p>Enter the password to access the secured URL</p>`;
+            // 聚焦密码框
+            if (decryptOnlyPassword) decryptOnlyPassword.focus();
+
+            // 绑定仅解密模式的解锁按钮（自动跳转）
+            decryptOnlyUnlockBtn.addEventListener('click', () => {
+                const pwd = decryptOnlyPassword.value.trim();
+                if (!pwd) {
+                    decryptOnlyMsg.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Please enter the password';
+                    decryptOnlyMsg.classList.add('warning-text');
+                    return;
+                }
+                try {
+                    const realUrl = decryptUrl(payload, pwd);
+                    // 自动跳转
+                    window.location.href = realUrl;
+                } catch (err) {
+                    decryptOnlyMsg.innerHTML = `<i class="fas fa-times-circle"></i> ${err.message}`;
+                    decryptOnlyMsg.classList.add('warning-text');
+                }
+            });
+
+            decryptOnlyClearBtn.addEventListener('click', () => {
+                decryptOnlyPassword.value = '';
+                decryptOnlyMsg.innerHTML = '';
+            });
+
+            // 支持回车键提交
+            decryptOnlyPassword.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    decryptOnlyUnlockBtn.click();
+                }
+            });
+        } else {
+            // 普通模式：正常显示两个区域，且右侧解密区只处理从哈希加载（但普通模式下没有哈希，所以隐藏解密面板）
+            normalModeDiv.style.display = 'grid';
+            decryptOnlyDiv.style.display = 'none';
+            // 初始状态右侧解密面板隐藏（因为没有加密哈希）
+            decryptPanel.style.display = 'none';
+            decryptDefaultMsg.style.display = 'block';
+
+            // 绑定生成加密链接
+            generateBtn.addEventListener('click', () => {
+                const url = targetUrlInput.value.trim();
+                const pwd = encPasswordInput.value;
+                if (!url) {
+                    generateMsg.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Please enter target URL';
+                    generateMsg.classList.add('warning-text');
+                    return;
+                }
+                if (!pwd) {
+                    generateMsg.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Please set an access password';
+                    generateMsg.classList.add('warning-text');
+                    return;
+                }
+                try {
+                    const encryptedPayload = encryptUrl(url, pwd);
+                    const shareLink = buildEncryptedShareLink(encryptedPayload);
+                    encryptedLinkDisplay.innerText = shareLink;
+                    generatedArea.style.display = 'block';
+                    generateMsg.innerHTML = '<i class="fas fa-check-circle"></i> Encrypted link generated! Copy and share it.';
+                    generateMsg.classList.remove('warning-text');
+                    generateMsg.classList.add('success-text');
+                } catch (err) {
+                    generateMsg.innerHTML = `<i class="fas fa-times-circle"></i> Encryption failed: ${err.message}`;
+                    generateMsg.classList.add('warning-text');
+                }
+            });
+
+            clearFormBtn.addEventListener('click', () => {
+                targetUrlInput.value = '';
+                encPasswordInput.value = '';
+                generatedArea.style.display = 'none';
+                generateMsg.innerHTML = '';
+            });
+
+            copyLinkBtn.addEventListener('click', async () => {
+                const link = encryptedLinkDisplay.innerText;
+                if (!link) return;
+                try {
+                    await navigator.clipboard.writeText(link);
+                    generateMsg.innerHTML = '<i class="fas fa-check"></i> Link copied to clipboard';
+                    setTimeout(() => { if (generateMsg.innerHTML.includes('copied')) generateMsg.innerHTML = ''; }, 2000);
+                } catch {
+                    generateMsg.innerHTML = '<i class="fas fa-times"></i> Copy failed, please copy manually';
+                }
+            });
+
+            // 右侧解密区（普通模式下可能用于测试，但无hash实效，保留逻辑但不自动显示）
+            // 如果用户手动在地址栏添加hash，可以通过hashchange处理
+            function handleIncomingEncryptedLink() {
+                const payloadHash = getEncryptedPayloadFromHash();
+                if (payloadHash) {
+                    decryptDefaultMsg.style.display = 'none';
+                    decryptPanel.style.display = 'block';
+                    revealedLinkArea.style.display = 'none';
+                    currentDecryptedLink = null;
+                    decryptMsg.innerHTML = '<i class="fas fa-lock"></i> Encrypted link detected. Enter the password to unlock and jump.';
+                    decryptMsg.classList.remove('warning-text', 'success-text');
+                } else {
+                    decryptDefaultMsg.style.display = 'block';
+                    decryptPanel.style.display = 'none';
+                    revealedLinkArea.style.display = 'none';
+                }
+            }
+
+            unlockBtn.addEventListener('click', () => {
+                const payloadHash = getEncryptedPayloadFromHash();
+                if (!payloadHash) {
+                    decryptMsg.innerHTML = '<i class="fas fa-times-circle"></i> No encrypted link in URL';
+                    decryptMsg.classList.add('warning-text');
+                    return;
+                }
+                const password = accessPassword.value.trim();
+                if (!password) {
+                    decryptMsg.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Please enter the password';
+                    decryptMsg.classList.add('warning-text');
+                    return;
+                }
+                try {
+                    const realUrl = decryptUrl(payloadHash, password);
+                    // 自动跳转
+                    window.location.href = realUrl;
+                } catch (err) {
+                    decryptMsg.innerHTML = `<i class="fas fa-times-circle"></i> ${err.message}`;
+                    decryptMsg.classList.add('warning-text');
+                    revealedLinkArea.style.display = 'none';
+                    currentDecryptedLink = null;
+                }
+            });
+
+            clearPasswordBtn.addEventListener('click', () => {
+                accessPassword.value = '';
+                decryptMsg.innerHTML = '';
+                revealedLinkArea.style.display = 'none';
+                currentDecryptedLink = null;
+            });
+
+            copyRealLinkBtn.addEventListener('click', async () => {
+                if (currentDecryptedLink) {
+                    await navigator.clipboard.writeText(currentDecryptedLink);
+                    decryptMsg.innerHTML = '<i class="fas fa-check"></i> Real link copied';
+                    setTimeout(() => { if (decryptMsg.innerHTML.includes('copied')) decryptMsg.innerHTML = ''; }, 1500);
+                } else {
+                    decryptMsg.innerHTML = '<i class="fas fa-times-circle"></i> No link to copy';
+                    decryptMsg.classList.add('warning-text');
+                }
+            });
+
+            window.addEventListener('hashchange', () => {
+                handleIncomingEncryptedLink();
+                accessPassword.value = '';
+                if (decryptMsg) decryptMsg.innerHTML = '';
+                revealedLinkArea.style.display = 'none';
+                currentDecryptedLink = null;
+            });
+            handleIncomingEncryptedLink();
+        }
+    })();
+</script>
+</body>
+</html>
