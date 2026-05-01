@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <meta name="description" content="Password-protect any link, generate encrypted sharing links. Only with correct password can access the real URL.">
+    <meta name="keywords" content="link encryption,password protection,secure sharing,AES encryption,GerBeian">
+    <meta name="author" content="GerBeian">
+    <title>Link Cipher</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #f3f6f9;
+            color: #1e2f3c;
+            line-height: 1.5;
+            padding: 2rem 1rem;
+            position: relative;
+        }
+
+        /* Corner watermark with favicon-style icon */
+        .waf-badge {
+            position: fixed;
+            top: 12px;
+            left: 12px;
+            background: rgba(44, 125, 160, 0.1);
+            backdrop-filter: blur(4px);
+            padding: 4px 12px;
+            border-radius: 32px;
+            font-size: 0.7rem;
+            font-weight: 500;
+            color: #2c7da0;
+            border: 1px solid rgba(44,125,160,0.3);
+            z-index: 1000;
+            pointer-events: none;
+            letter-spacing: 0.3px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        /* small icon styling */
+        .waf-icon {
+            width: 16px;
+            height: 16px;
+            object-fit: contain;
+            display: inline-block;
+            vertical-align: middle;
+            image-rendering: crisp-edges;
+        }
+        /* fallback icon (if image fails to load, a simple lock) */
+        .waf-icon-fallback {
+            font-size: 12px;
+            color: #2c7da0;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 2.5rem;
+        }
+        .header h1 {
+            font-size: 2rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, #1f5f7a, #2c7da0);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .header p {
+            color: #5f7f95;
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .two-columns {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+
+        .section {
+            background: transparent;
+            border-radius: 0;
+            padding: 0;
+        }
+
+        .section-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 1.2rem;
+            padding-bottom: 0.4rem;
+            border-bottom: 2px solid #2c7da0;
+            display: inline-block;
+        }
+
+        .input-group {
+            margin-bottom: 1.2rem;
+        }
+
+        label {
+            font-weight: 500;
+            display: block;
+            margin-bottom: 0.4rem;
+            color: #1a4b66;
+            font-size: 0.85rem;
+        }
+
+        input, .result-box {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid #cfdfe8;
+            border-radius: 12px;
+            font-family: 'Inter', monospace;
+            font-size: 0.9rem;
+            background: #ffffff;
+            transition: 0.2s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #2c7da0;
+            box-shadow: 0 0 0 2px rgba(44,125,160,0.2);
+        }
+
+        .result-box {
+            background: #f8fafc;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 0.8rem;
+        }
+
+        .btn {
+            border: none;
+            font-weight: 500;
+            padding: 0.6rem 1.3rem;
+            border-radius: 30px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: #eef2f8;
+            color: #1e2f3c;
+        }
+
+        .btn-primary {
+            background: #2c7da0;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1e637f;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+        }
+
+        .btn-secondary:hover {
+            background: #d0dae4;
+        }
+
+        .flex-btns {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin: 1rem 0 0.5rem;
+        }
+
+        .status-msg {
+            font-size: 0.75rem;
+            margin-top: 0.75rem;
+            padding: 0.4rem 0;
+            color: #496f86;
+        }
+
+        .warning-text {
+            color: #c23d3d;
+        }
+
+        .success-text {
+            color: #2c7da0;
+        }
+
+        .password-input-area {
+            margin: 0.5rem 0;
+        }
+
+        .revealed-area {
+            margin-top: 1.2rem;
+            padding-top: 1rem;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        footer {
+            margin-top: 3rem;
+            text-align: center;
+            font-size: 0.8rem;
+            color: #7f9cb0;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 1.8rem;
+        }
+
+        @media (max-width: 800px) {
+            .two-columns {
+                grid-template-columns: 1fr;
+                gap: 2rem;
+            }
+            body {
+                padding: 1.2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+<!-- 左上角水印：添加来源于用户提供的图标，极小尺寸 -->
+<div class="waf-badge">
+    <img class="waf-icon" src="https://i.imgs.ovh/2026/04/18/Zxml4x.webp" 
+         alt="shield" 
+         onerror="this.onerror=null; this.style.display='none'; this.nextElementSibling.style.display='inline-flex';">
+    <i class="fas fa-lock waf-icon-fallback" style="display: none;"></i>
+    此页面受到MuFen WAF保护
+</div>
+
+<div class="container">
+    <div class="header">
+        <h1><i class="fas fa-link"></i> Link Cipher Password Shield</h1>
+        <p>Use password to protect your link</p>
+    </div>
+
+    <div class="two-columns">
+        <!-- Left: Encryption Generator -->
+        <div class="section">
+            <div class="section-title"><i class="fas fa-lock"></i> Create Encrypted Link</div>
+            <div class="input-group">
+                <label><i class="fas fa-globe"></i> Target URL</label>
+                <input type="url" id="targetUrl" placeholder="https://example.com/secret" value="https://www.google.com">
+            </div>
+            <div class="input-group">
+                <label><i class="fas fa-key"></i> Access Password</label>
+                <input type="password" id="encPassword" placeholder="Set a password to protect this link">
+            </div>
+            <div class="flex-btns">
+                <button id="generateLinkBtn" class="btn btn-primary"><i class="fas fa-shield-alt"></i> Generate Encrypted Link</button>
+                <button id="clearFormBtn" class="btn btn-secondary"><i class="fas fa-eraser"></i> Clear</button>
+            </div>
+            <div id="generatedArea" style="display: none;">
+                <label><i class="fas fa-share-alt"></i> Encrypted Share Link (copy & send)</label>
+                <div class="result-box" id="encryptedLinkDisplay"></div>
+                <button id="copyLinkBtn" class="btn btn-secondary" style="margin-top: 0.6rem;"><i class="fas fa-copy"></i> Copy Link</button>
+                <div id="generateMsg" class="status-msg"></div>
+            </div>
+        </div>
+
+        <!-- Right: Decryption Access Area -->
+        <div class="section">
+            <div class="section-title"><i class="fas fa-unlock-alt"></i> Decryption Access</div>
+            <div id="decryptDefaultMsg">
+                <i class="fas fa-info-circle"></i> If you received an encrypted link, opening it will show the password prompt below.<br>Enter the correct password to reveal the real address.
+            </div>
+            <div id="decryptPanel" style="display: none;">
+                <div class="password-input-area">
+                    <label><i class="fas fa-key"></i> Enter password to access the encrypted link</label>
+                    <input type="password" id="accessPassword" placeholder="Enter password">
+                    <div class="flex-btns" style="margin-top: 12px;">
+                        <button id="unlockBtn" class="btn btn-primary"><i class="fas fa-unlock"></i> Unlock & Reveal Link</button>
+                        <button id="clearPasswordBtn" class="btn btn-secondary"><i class="fas fa-times"></i> Clear</button>
+                    </div>
+                    <div id="decryptMsg" class="status-msg"></div>
+                </div>
+            </div>
+            <div id="revealedLinkArea" style="display: none;" class="revealed-area">
+                <label><i class="fas fa-eye"></i> Decrypted Real URL</label>
+                <div class="result-box" id="revealedUrl"></div>
+                <div class="flex-btns">
+                    <button id="visitLinkBtn" class="btn btn-primary"><i class="fas fa-external-link-alt"></i> Visit Link</button>
+                    <button id="copyRealLinkBtn" class="btn btn-secondary"><i class="fas fa-copy"></i> Copy Link</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer
