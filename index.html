@@ -3,14 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <meta name="description" content="Password-protect any link with AES-256, with QR sharing and smart password tips.">
+    <meta name="description" content="Password-protect any link with AES-256, with QR sharing and smart password tools.">
     <meta name="keywords" content="link encryption,password strength,secure sharing,AES encryption,QR code,GerBeian">
     <meta name="author" content="GerBeian">
     <title>Link Cipher Pro+</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <!-- 主 CDN：国内可用，稳定性高 -->
+    <script src="https://cdn.bootcdn.net/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -583,7 +584,41 @@
             return;
         }
 
-        // ---------- 核心加解密（纯 URL，无过期） ----------
+        // ---------- QR 库智能加载 ----------
+        function ensureQRCodeLibrary(callback) {
+            if (typeof QRCode !== 'undefined') {
+                callback(true);
+                return;
+            }
+            // 尝试动态加载备用 CDN（unpkg 国内可能慢，但作为兜底）
+            const script = document.createElement('script');
+            script.src = 'https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js';
+            script.onload = () => callback(true);
+            script.onerror = () => callback(false);
+            document.head.appendChild(script);
+        }
+
+        function showQRCode(link) {
+            const container = document.getElementById('qrContainer');
+            container.style.display = 'block';
+            container.innerHTML = '';
+            ensureQRCodeLibrary((loaded) => {
+                if (!loaded) {
+                    container.innerHTML = '<p style="color:#dc2626;">⚠️ QR library failed to load. Please copy the link manually.</p>';
+                    return;
+                }
+                // 已加载，生成二维码
+                new QRCode(container, {
+                    text: link,
+                    width: 150,
+                    height: 150,
+                    colorDark: "#1e1b4b",
+                    colorLight: "#ffffff",
+                });
+            });
+        }
+
+        // ---------- 核心加解密 ----------
         function encryptUrl(url, password) {
             if (!url || !password) throw new Error("URL and password cannot be empty");
             const salt = CryptoJS.lib.WordArray.random(128/8);
@@ -724,7 +759,7 @@
             element.className = `status-msg ${type==='warning'?'warning-text':'success-text'}`;
         }
 
-        // ---------- 密码可见性切换 ----------
+        // ---------- 密码可见性 ----------
         function setupToggle(inputId, btnId) {
             const input = document.getElementById(inputId);
             const btn = document.getElementById(btnId);
@@ -817,6 +852,7 @@
             }
         });
 
+        // 修改后的 Show QR 按钮逻辑
         showQrBtn.addEventListener('click', () => {
             const link = encryptedLinkDisplay.innerText;
             if (!link) return;
@@ -825,15 +861,7 @@
                 qrContainer.innerHTML = '';
                 return;
             }
-            qrContainer.style.display = 'block';
-            qrContainer.innerHTML = '';
-            new QRCode(qrContainer, {
-                text: link,
-                width: 150,
-                height: 150,
-                colorDark: "#1e1b4b",
-                colorLight: "#ffffff",
-            });
+            showQRCode(link);
         });
 
         // ---------- 解密区域逻辑 ----------
